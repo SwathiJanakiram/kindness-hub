@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const adviceSchema = new mongoose.Schema({
   suggestion: { type: String, required: true, maxlength: 400 },
   helpful: { type: Number, default: 0 },
+  isAI: { type: Boolean, default: false }, 
 }, { timestamps: true });
 
 const problemSchema = new mongoose.Schema({

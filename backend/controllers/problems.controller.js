@@ -1,6 +1,7 @@
 import Problem from '../models/problem.model.js';
 import { Stats, DailyStat } from '../models/stats.js';
 import { nanoid } from 'nanoid';
+import { getAIAdvice } from '../config/gemini.js';
 
 const generateCode = () => `KH-${nanoid(5).toUpperCase()}`;
 
@@ -51,15 +52,29 @@ export const getProblemByCode = async (req, res) => {
 export const createProblem = async (req, res) => {
   try {
     const { title, description, category } = req.body;
-    if (!title || !description) return res.status(400).json({ message: 'Title and description required' });
+    if (!title || !description)
+      return res.status(400).json({ message: 'Title and description required' });
 
     const secretCode = generateCode();
     const problem = await Problem.create({ title, description, category, secretCode });
 
+    // update stats
     await Stats.findOneAndUpdate({}, { $inc: { problemsPosted: 1 } }, { upsert: true });
     await updateDaily('problems');
 
+    // 🤖 get AI advice in background — don't await before responding
     res.status(201).json({ problem, secretCode });
+
+    // generate AI advice after response sent
+    const aiSuggestion = await getAIAdvice(title, description, category);
+    if (aiSuggestion) {
+      await Problem.findByIdAndUpdate(
+        problem._id,
+        { $push: { advice: { $each: [{ suggestion: aiSuggestion, isAI: true }], $position: 0 } } }
+      );
+      await Stats.findOneAndUpdate({}, { $inc: { adviceGiven: 1 } }, { upsert: true });
+      console.log(`✨ AI advice generated for problem: ${problem._id}`);
+    }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
